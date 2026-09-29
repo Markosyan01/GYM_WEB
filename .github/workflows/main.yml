@@ -10,30 +10,63 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v2
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Archive project
-      run: zip -r gymapp4.zip . -x "*.git*" "__pycache__/*"
+      - name: Archive project
+        run: |
+          zip -r gymapp4.zip . \
+            -x "*.git*" \
+            -x "__pycache__/*" \
+            -x "node_modules/*"
 
-    - name: Copy files to EC2 via SCP
-      uses: appleboy/scp-action@master
-      with:
-        host: ${{ secrets.EC2_HOST }}
-        username: ${{ secrets.EC2_USER }}
-        key: ${{ secrets.EC2_SSH_KEY }}
-        source: "gymapp4.zip"
-        target: "~/"
+      - name: Check secrets
+        run: |
+          if [ -z "${{ secrets.EC2_HOST }}" ]; then
+            echo "ERROR: EC2_HOST is empty"
+            exit 1
+          fi
 
-    - name: SSH and run Docker container
-      uses: appleboy/ssh-action@master
-      with:
-        host: ${{ secrets.EC2_HOST }}
-        username: ${{ secrets.EC2_USER }}
-        key: ${{ secrets.EC2_SSH_KEY }}
-        script: |
-          rm -rf ~/gymapp4
-          mkdir -p ~/gymapp4
-          unzip -o ~/gymapp4.zip -d ~/gymapp4
-          cd ~/gymapp4
-          sudo docker compose up -d --build
+          if [ -z "${{ secrets.EC2_USER }}" ]; then
+            echo "ERROR: EC2_USER is empty"
+            exit 1
+          fi
+
+          if [ -z "${{ secrets.EC2_SSH_KEY }}" ]; then
+            echo "ERROR: EC2_SSH_KEY is empty"
+            exit 1
+          fi
+
+          echo "EC2_HOST is configured"
+          echo "EC2_USER is configured"
+          echo "EC2_SSH_KEY is configured"
+
+      - name: Copy files to EC2 via SCP
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "gymapp4.zip"
+          target: "/home/ubuntu/"
+
+      - name: SSH and run Docker container
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+
+            rm -rf ~/gymapp4
+            mkdir -p ~/gymapp4
+
+            unzip -o ~/gymapp4.zip -d ~/gymapp4
+
+            cd ~/gymapp4
+
+            sudo docker compose down || true
+            sudo docker compose up -d --build
+
+            sudo docker compose ps
